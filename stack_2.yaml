@@ -1,0 +1,47 @@
+Parameters:
+  codebucket:
+    Description: Name of the bucket in which code resides.
+    Type: String
+    Default: sv-b1-frontend
+  swaggerkey:
+    Description: Key of swagger file.
+    Type: String
+    Default: "AI-Photo-Search-v1-swagger-apigateway-v1.yaml"
+  lf2name:
+    Description: Arn of LF2 
+    Type: String
+    Default: sv-search
+Resources:
+  aiapigateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      BodyS3Location:
+        Bucket: !Ref codebucket
+        Key: !Ref swaggerkey
+      Name: ai-api-gateway
+      FailOnWarnings: True
+      EndpointConfiguration:
+        Types:
+          - 'REGIONAL'
+  
+  permissionapigatewaylf2:
+    DependsOn: aiapigateway
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref lf2name
+      Principal: apigateway.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !Join
+        - ''
+        - - !Sub 'arn:aws:execute-api:us-east-1:${AWS::AccountId}:'
+          - !Ref aiapigateway
+          - '/*/GET/search'
+      
+
+  apideploymentv1:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      Description: The v1 deployment of search photos
+      RestApiId: !Ref aiapigateway
+      StageName: v1
