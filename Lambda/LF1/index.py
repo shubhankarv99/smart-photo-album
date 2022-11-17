@@ -51,8 +51,8 @@ def lambda_handler(event, context):
     _id = uuid.uuid1().hex
     
     path = '/{}/{}/{}/'.format(_index, _type, _id)
-    master_user = "sv2229"
-    master_password = "Internet@1122"
+    master_user = ""
+    master_password = ""
     
     url = host + path
     r = requests.post(url, auth=(master_user, master_password), json=a1)
