@@ -1,7 +1,7 @@
 print("start")
 import os
-os.environ['AWS_ACCESS_KEY_ID'] = 'AKIAW3PUIDEDF5ZYRCGK'
-os.environ['AWS_SECRET_ACCESS_KEY'] = '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'
+os.environ['AWS_ACCESS_KEY_ID'] = ''
+os.environ['AWS_SECRET_ACCESS_KEY'] = ''
 os.environ['AWS_DEFAULT_REGION'] = 'us-east-1'
 
 import ruamel.yaml
@@ -16,9 +16,7 @@ parser.add_argument("-b", "--bucketname", help = "Name of the bucket in which ap
 args = parser.parse_args()
 
 client = boto3.client("sts")
-                      #aws_access_key_id="AKIAW3PUIDEDF5ZYRCGK",
-                      #aws_secret_access_key="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",
-                      #region_name = "us-east-1")
+                      
 
 account_id = client.get_caller_identity()["Account"]
 
