@@ -14,8 +14,8 @@ def lambda_handler(event, context):
     ##logger.debug(f"[USER][CONTEXT] {context}")
     
     host = 'https://search-sv-photos-zmrwllokdrva47w42s6dg5jxi4.us-east-1.es.amazonaws.com'
-    master_user = "sv2229"
-    master_password = "Internet@1122"
+    master_user = ""
+    master_password = ""
     print("event: ",event)
     text = event['queryStringParameters']['q']
     
