@@ -1,0 +1,416 @@
+Parameters:
+  ccbucketname:
+    Description: The name of the S3 bucket to be created.
+    Type: String
+    Default: sv-b2-album
+  lf1name:
+    Description: The name of the lf1 lambda function to be created.
+    Type: String
+    Default: sv-index
+  lf2name:
+    Description: The name of the lf2 lambda function to be created.
+    Type: String
+    Default: sv-search
+  domainname:
+    Description: The name of the opensearch domain
+    Type: String
+    Default: sv-photos
+  masterusername:
+    Description: Username for opensearch.
+    Type: String
+    Default: sv2229
+  masterpassword:
+    Description: Password for opensearch.
+    Type: String
+    Default: Internet@1122
+  artifactname:
+    Description: Name of the bucket in which code resides.
+    Type: String
+    Default: sv-b1-frontend
+  GitHubOwner:
+    Type: String
+    Default: shubhankarv99
+    AllowedPattern: '[A-Za-z0-9-]+'
+  GitHubRepo:
+    Type: String
+    Default: Intelligent-Photo-Album
+    AllowedPattern: '[A-Za-z0-9-]+'
+  GitHubLink:
+    Type: String
+    Default: https://github.com/shubhankarv99/Intelligent-Photo-Album.git
+  GitHubBranch:
+    Type: String
+    Default: master
+    AllowedPattern: '[A-Za-z0-9-]+'
+  GitHubOAuthToken:
+    Type: String
+    Default: ''
+    NoEcho: true
+Resources:
+  # Frontent code pipeline
+  artifactbucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref artifactname
+
+
+  frontendbucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicRead
+      WebsiteConfiguration:
+        IndexDocument: index.html
+
+  frontentbucketpolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref frontendbucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublicReadForGetBucketObjects
+            Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Join
+              - ''
+              - - 'arn:aws:s3:::'
+                - !Ref frontendbucket
+                - /*
+    DependsOn: frontendbucket
+
+  frontendpipelines3role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: 'Role for codepipeline to access S3'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+
+  # Architecture
+  ccbucket2:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: PublicRead
+      BucketName: !Ref ccbucketname
+      PublicAccessBlockConfiguration: 
+        BlockPublicAcls: False
+        BlockPublicPolicy: False
+        IgnorePublicAcls: False
+        RestrictPublicBuckets: False
+      NotificationConfiguration:
+        LambdaConfigurations:
+        - Event: "s3:ObjectCreated:*"
+          Function: !GetAtt lf1.Arn  
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - HEAD
+              - GET
+              - PUT
+            AllowedOrigins:
+              - '*'
+            ExposedHeaders:
+              - ETag
+    DependsOn: lf1
+
+  ccbucket2policy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ccbucket2
+      PolicyDocument:
+        {
+          'Statement':
+            [
+              {
+                'Effect': 'Allow',
+                'Principal': { 'AWS': '*' },
+                'Action': 's3:ListBucket',
+                'Resource':
+                  {
+                    'Fn::Join':
+                      ['', ['arn:aws:s3:::', { 'Ref': 'ccbucket2' }]],
+                  },
+              },
+              {
+                'Effect': 'Allow',
+                'Principal': { 'AWS': '*' },
+                'Action': ['s3:GetObject', 's3:PutObject'],
+                'Resource':
+                  {
+                    'Fn::Join':
+                      [
+                        '',
+                        [
+                          'arn:aws:s3:::',
+                          { 'Ref': 'ccbucket2' },
+                          '/*',
+                        ],
+                      ],
+                  },
+              },
+            ],
+        }
+  BucketPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref lf1
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref "AWS::AccountId"
+      SourceArn: !Sub "arn:aws:s3:::${ccbucketname}"
+  
+  lf1:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Code: 
+        ZipFile: |
+          # Code from cloud formation
+      FunctionName: !Ref lf1name
+      Role: !GetAtt lf1role.Arn
+      Runtime: python3.8
+      Timeout: 15
+      Handler: index.lambda_handler
+    DependsOn: lf1role
+  
+  lf1role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal: {Service: [lambda.amazonaws.com]}
+          Action: ['sts:AssumeRole']
+      Path: /
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+      - "arn:aws:iam::aws:policy/AmazonRekognitionFullAccess"
+  lf1log:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Join
+        - ''
+        - - '/aws/lambda/'
+          - !Ref lf1
+    DependsOn: lf1
+
+  lf2:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Code: 
+        ZipFile: |
+          # Code from cloud formation
+      FunctionName: !Ref lf2name
+      Role: !GetAtt lf2role.Arn
+      Runtime: python3.8
+      Timeout: 15
+      Handler: index.lambda_handler
+    DependsOn: lf2role
+  
+  lf2role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal: {Service: [lambda.amazonaws.com]}
+          Action: ['sts:AssumeRole']
+      Path: /
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+      - "arn:aws:iam::aws:policy/AmazonLexFullAccess"
+  lf2log:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Join
+        - ''
+        - - '/aws/lambda/'
+          - !Ref lf2
+    DependsOn: lf2
+  
+  
+  apigateways3role:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          Effect: Allow
+          Principal: {Service: [apigateway.amazonaws.com]}
+          Action: ['sts:AssumeRole']
+      Path: /
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/AmazonS3FullAccess"
+      - "arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+
+  codebuildservicerole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: 'Role for codebuild'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+  codebuildlambda:
+    Type: AWS::CodeBuild::Project
+    Properties: 
+      Name: Test
+      Artifacts:
+        Type: NO_ARTIFACTS
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:4.0
+        Type: LINUX_CONTAINER
+      ServiceRole: !GetAtt codebuildservicerole.Arn
+      Source:
+        BuildSpec: !Sub |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                python: 3.8
+              commands:
+                - echo "Installing dependencies..."
+                - pip install requests -t lib
+            build:
+              commands:
+                - echo "Zipping deployment package..."
+                - cd lib
+                - zip -r9 ../deployment_package_1.zip .
+                - zip -r9 ../deployment_package_2.zip .
+                - cd ..
+                - zip -r -j deployment_package_1.zip "Lambda/LF1/index.py"
+                - zip -r -j deployment_package_2.zip "Lambda/LF2/index.py"
+            post_build:
+              commands:
+                - echo "Updating lambda Function..."
+                - aws lambda update-function-code --function-name ${lf1name} --zip-file fileb://deployment_package_1.zip
+                - aws lambda update-function-code --function-name ${lf2name} --zip-file fileb://deployment_package_2.zip
+                - echo "DONE!!"
+
+        Location: !Ref GitHubLink
+        Type: GITHUB
+      Triggers:
+        Webhook: True
+        FilterGroups:
+        - - Type: EVENT
+            Pattern: PUSH
+
+  frontendcodepipelines3:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      ArtifactStore:
+        Location: !Ref artifactbucket
+        Type: S3
+      RestartExecutionOnUpdate: False
+      RoleArn: !GetAtt frontendpipelines3role.Arn
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Provider: GitHub
+                Version: 1
+              Configuration:
+                {
+                  'Owner': !Ref GitHubOwner,
+                  'Repo': !Ref GitHubRepo,
+                  'Branch': !Ref GitHubBranch,
+                  'OAuthToken': !Ref GitHubOAuthToken,
+                }
+              OutputArtifacts:
+                - Name: 'ai-app'
+              Region: us-east-1
+        - Name: Build
+          Actions:
+            - Name: Build
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: '1'
+                Provider: CodeBuild
+              Configuration:
+                ProjectName: !Ref codebuildlambda
+              InputArtifacts:
+                - Name: ai-app
+        - Name: Deploy
+          Actions:
+            - Name: Deploy
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: S3
+                Version: 1
+              Configuration:
+                {
+                  'BucketName': { 'Ref': 'frontendbucket' },
+                  'Extract': True
+                }
+              InputArtifacts:
+                - Name: 'ai-app'
+              Region: us-east-1
+
+  opensearchphotos:
+    Type: AWS::OpenSearchService::Domain
+    Properties:
+      AccessPolicies:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: '*'
+            Action: es:*
+            Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/${domainname}/*"
+      AdvancedSecurityOptions:
+        Enabled: True
+        InternalUserDatabaseEnabled: True
+        MasterUserOptions:
+          MasterUserName: !Ref masterusername
+          MasterUserPassword: !Ref masterpassword
+      ClusterConfig:
+        InstanceCount: 1
+        InstanceType: t3.small.search
+      DomainEndpointOptions:
+        EnforceHTTPS: True
+      DomainName: !Ref domainname
+      EBSOptions:
+        EBSEnabled: True
+        VolumeSize: 10
+        VolumeType: gp2
+      EncryptionAtRestOptions:
+        Enabled: True
+      EngineVersion: Elasticsearch_7.10
+      NodeToNodeEncryptionOptions:
+          Enabled: True
+
+
+  
+      
+
+
+      
+
